@@ -1,0 +1,148 @@
+@page "/historico"
+@using System.ComponentModel
+@using System.Globalization
+@rendermode InteractiveAuto
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<PageTitle>Histórico</PageTitle>
+
+<div class="main-container">
+
+    <div class="image-container">
+        <img class="history-logo"
+                src="icon-no-bg.png" 
+                alt="Logo">
+    </div>
+
+    <h1> Histórico </h1>
+
+    <div class="input-container button-font-style">
+        <InputText  class="search-style" type="search" placeholder="Pesquisar (digite um IMC e aperte enter)..." @bind-Value="SearchString"></InputText>
+    </div>
+
+     <div class="list-container">
+         <ul>
+             @foreach (var item in GetFilteredItems())
+             {
+                 <li>
+                     <div style="flex-direction: row; display: flex;">
+                         <div>
+                             <div class="square">
+                                 <p style="font-weight: bold">@item.Imc</p>
+                             </div>
+                         </div>
+                         <div style="width: 100%;">
+                             <div class="row">
+                                 <div style="display: flex; flex-direction: row">
+                                     <p style="font-weight: bold;">@item.GetImcStatusString()</p>
+                                     <i class="icon">&#11088;</i>
+                                 </div>
+                                 <div class="time font-style">
+                                     <p style="color: #522020;">@item.GetCreatedDate()</p>
+                                 </div>
+                             </div>
+                             <div class="row">
+                                 <div class="font-style">@item.GetImcMessage()</div>
+                             </div>
+                         </div>
+                     </div>
+                 </li>
+             }
+         </ul>
+    </div>
+</div>
+
+@code {
+    private List<HistoryItem>? HistoryList { get; set; } = [];
+    public string? SearchString { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await LocalStorage.ContainKeyAsync("imc-data"))
+        {
+            HistoryList = await LocalStorage.GetItemAsync<List<HistoryItem>>("imc-data");
+        }
+    }
+
+    private List<HistoryItem>? GetFilteredItems()
+    {
+        if (!string.IsNullOrEmpty(SearchString))
+        {
+            return HistoryList?.Where(entry => entry.Imc.ToString(CultureInfo.InvariantCulture)
+                .Contains(SearchString)).ToList();
+        }
+
+        return HistoryList;
+    }
+    
+    public class HistoryItem
+    {
+        public float Imc { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public string GetCreatedDate()
+        {
+            return (DateTime.Now - CreatedAt).Minutes <= 10 ? $"{(DateTime.Now-CreatedAt).Minutes}min atrás"
+                : CreatedAt.ToShortDateString();
+        }
+
+        public string GetImcStatusString()
+        {
+            var status = GetImcStatus();
+            
+            var field = status.GetType().GetField(status.ToString());
+
+            if (Attribute.GetCustomAttribute(field!, typeof(DescriptionAttribute)) is DescriptionAttribute attribute)
+            {
+                return attribute.Description;
+            }
+            
+            return string.Empty;
+        }
+        
+        public string GetImcMessage()
+        {
+            return GetImcStatus() switch
+            {
+                ImcStatus.Magro => "Procure um médico. Abaixo do normal",
+                ImcStatus.Normal => "Que bom que você está com o peso normal!",
+                ImcStatus.Sobrepeso => "Pré-obesidade e muitas pessoas nessa faixa já apresentam doenças associadas, como diabetes e hipertensão.",
+                ImcStatus.ObesidadeGrauI => "Sinal de alerta! Chegou na hora de se cuidar, mesmo que seus exames sejam normais.",
+                ImcStatus.ObesidadeGrauII => "É hora de se cuidar, iniciando mudanças no estilo de vida com o acompanhamento próximo de profissionais de saúde.",
+                ImcStatus.ObesidadeGrauIII => "Sinal vermelho, com forte probabilidade de já existirem doenças muito graves associadas.",
+                _ => throw new ArgumentOutOfRangeException()
+            };
+        }
+
+        private ImcStatus GetImcStatus()
+        {
+            return Imc switch
+            {
+                <= 18.5f => ImcStatus.Magro,
+                >= 18.6f and <= 24.9f => ImcStatus.Normal,
+                >= 25.0f and <= 29.9f => ImcStatus.Sobrepeso,
+                >= 30 and <= 34.9f => ImcStatus.ObesidadeGrauI,
+                >= 35 and <= 39.9f => ImcStatus.ObesidadeGrauII,
+                >= 40 => ImcStatus.ObesidadeGrauIII,
+                _ => ImcStatus.Magro
+            };
+        }
+    }
+
+    public enum ImcStatus
+    {
+        [Description("Magro")]
+        Magro,
+        [Description("Normal")]
+        Normal,
+        [Description("Sobrepeso")]
+        Sobrepeso,
+        [Description("Obesidade Grau I")]
+        ObesidadeGrauI,
+        [Description("Obesidade Grau II")]
+        ObesidadeGrauII,
+        [Description("Obesidade Grau III")]
+        ObesidadeGrauIII
+    }
+}
